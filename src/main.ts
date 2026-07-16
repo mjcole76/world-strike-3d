@@ -681,6 +681,16 @@ function animatePlayers(dt: number): void {
     const legR = player.mesh.userData.legR as THREE.Mesh;
     legL.rotation.x = swing + (player.tackle > .25 ? -1 : 0);
     legR.rotation.x = -swing;
+    const armL = player.mesh.userData.armL as THREE.Mesh;
+    const armR = player.mesh.userData.armR as THREE.Mesh;
+    if (player.role === 'GK') {
+      const spread = 1.15 + Math.sin(performance.now() * .002 + player.id) * .07;
+      armL.rotation.set(0, 0, -spread);
+      armR.rotation.set(0, 0, spread);
+    } else {
+      armL.rotation.set(-swing * .85, 0, -.3);
+      armR.rotation.set(swing * .85, 0, .3);
+    }
     player.mesh.position.y = Math.abs(Math.sin(player.mesh.userData.phase * 2)) * Math.min(.05, speed * .006);
   }
   selectionRing.position.set(controlled.mesh.position.x, .055, controlled.mesh.position.z);
@@ -1299,7 +1309,7 @@ function beginCharge(): void {
 function releaseCharge(): void {
   if (!charging) return;
   charging = false;
-  if (phase === 'penalty' || phase === 'freekick' || shotCharge > .24) shootFrom(controlled, Math.max(.25, shotCharge));
+  if (phase === 'penalty' || phase === 'freekick' || shotCharge > .15) shootFrom(controlled, Math.max(.25, shotCharge));
   else passFrom(controlled, false);
   shotCharge = 0;
 }

@@ -184,6 +184,13 @@ export function createPlayerMesh(): THREE.Group {
   const legGeo = new THREE.CylinderGeometry(.14, .16, .82, 8);
   const legL = new THREE.Mesh(legGeo, skin); legL.position.set(-.25, .36, 0); legL.castShadow = true; group.add(legL);
   const legR = new THREE.Mesh(legGeo, skin); legR.position.set(.25, .36, 0); legR.castShadow = true; group.add(legR);
+  const armGeo = new THREE.CylinderGeometry(.11, .09, .82, 8);
+  armGeo.translate(0, -.41, 0);
+  const armL = new THREE.Mesh(armGeo, shirt); armL.position.set(-.6, 2.14, 0); armL.rotation.z = -.3; armL.castShadow = true; group.add(armL);
+  const armR = new THREE.Mesh(armGeo, shirt); armR.position.set(.6, 2.14, 0); armR.rotation.z = .3; armR.castShadow = true; group.add(armR);
+  const handGeo = new THREE.SphereGeometry(.11, 8, 6);
+  const handL = new THREE.Mesh(handGeo, skin); handL.position.set(0, -.86, 0); armL.add(handL);
+  const handR = new THREE.Mesh(handGeo, skin); handR.position.set(0, -.86, 0); armR.add(handR);
   const bootGeo = new THREE.BoxGeometry(.28, .16, .52);
   const bootMat = mat(0x10131a, .5);
   const bootL = new THREE.Mesh(bootGeo, bootMat); bootL.position.set(-.25, -.02, -.1); group.add(bootL);
@@ -192,6 +199,8 @@ export function createPlayerMesh(): THREE.Group {
   numberBadge.position.set(0, 1.65, -.55); numberBadge.rotation.y = Math.PI; group.add(numberBadge);
   group.userData.legL = legL;
   group.userData.legR = legR;
+  group.userData.armL = armL;
+  group.userData.armR = armR;
   group.userData.phase = Math.random() * Math.PI * 2;
   group.userData.shirtMat = shirt;
   group.userData.shortsMat = shorts;

@@ -53,7 +53,8 @@ button { font: inherit; }
 .power-wrap { position: absolute; z-index: 6; left: 50%; bottom: 76px; transform: translate(-50%, 12px); opacity: 0; transition: .15s; text-align: center; }
 .power-wrap.visible { opacity: 1; transform: translate(-50%, 0); }
 .power-wrap span { color: var(--gold); font: 700 10px 'IBM Plex Mono'; letter-spacing: .1em; }
-.power-meter { width: 190px; height: 9px; margin-top: 5px; padding: 2px; border: 1px solid rgba(255,255,255,.45); background: rgba(0,0,0,.48); }
+.power-meter { position: relative; width: 190px; height: 9px; margin-top: 5px; padding: 2px; border: 1px solid rgba(255,255,255,.45); background: rgba(0,0,0,.48); }
+.power-meter::after { content: ''; position: absolute; top: -2px; bottom: -2px; left: 15%; width: 2px; background: rgba(255,255,255,.85); }
 .power-meter i { display: block; width: 0%; height: 100%; background: linear-gradient(90deg, #f8e46a, #ff7a33); }
 
 .match-message { position: absolute; z-index: 8; top: 24%; left: 50%; transform: translate(-50%, -15px) skew(-7deg); color: #071326; background: var(--gold); padding: 9px 24px; opacity: 0; font: 900 23px 'Barlow Condensed'; letter-spacing: .12em; box-shadow: 8px 8px 0 rgba(0,0,0,.22); transition: .25s; pointer-events: none; }
