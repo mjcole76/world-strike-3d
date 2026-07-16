@@ -30,9 +30,9 @@ button { font: inherit; }
 .scoreboard { min-width: 300px; display: flex; align-items: center; justify-content: center; background: rgba(3,11,28,.93); border-top: 2px solid rgba(255,255,255,.15); }
 .scoreboard strong { min-width: 92px; text-align: center; font-size: 26px; font-weight: 800; }
 .team { width: 92px; display: flex; align-items: center; gap: 10px; justify-content: center; font: 800 16px 'Barlow Condensed'; letter-spacing: .08em; }
-.team i { width: 12px; height: 22px; transform: skew(-8deg); }
-.team.aurora i { background: var(--blue); box-shadow: 3px 0 0 #fff; }
-.team.atlas i { background: var(--red); box-shadow: -3px 0 0 #2b2d39; }
+.team i { width: 12px; height: 22px; transform: skew(-8deg); background: var(--blue); }
+.team.home i { box-shadow: 3px 0 0 #fff; }
+.team.away i { background: var(--red); box-shadow: -3px 0 0 #2b2d39; }
 .clock { min-width: 76px; display: grid; place-items: center; background: #fff; color: #071326; font: 800 20px 'IBM Plex Mono'; transform: skew(-8deg); }
 
 .player-hud { position: absolute; z-index: 5; left: 22px; bottom: 25px; width: 250px; padding: 12px 15px; background: linear-gradient(90deg, rgba(3,12,31,.94), rgba(3,12,31,.55)); border-left: 4px solid var(--blue); }
@@ -46,6 +46,9 @@ button { font: inherit; }
 .controls-hint { display: block; margin-top: 8px; color: rgba(255,255,255,.55); font: 500 9px 'IBM Plex Mono'; letter-spacing: .04em; text-shadow: 0 2px 5px #000; }
 .music-button { position: absolute; z-index: 6; right: 20px; bottom: 24px; color: #fff; background: rgba(3,12,31,.84); border: 1px solid rgba(255,255,255,.25); padding: 9px 13px; cursor: pointer; font: 600 10px 'IBM Plex Mono'; }
 .music-button:hover, .music-button:focus-visible { border-color: var(--gold); color: var(--gold); outline: none; }
+
+.radar { position: absolute; z-index: 5; right: 20px; bottom: 74px; width: 96px; height: 150px; opacity: 0; transition: opacity .25s; pointer-events: none; border: 1px solid rgba(255,255,255,.24); background: rgba(2,10,24,.66); }
+.radar.visible { opacity: .92; }
 
 .power-wrap { position: absolute; z-index: 6; left: 50%; bottom: 76px; transform: translate(-50%, 12px); opacity: 0; transition: .15s; text-align: center; }
 .power-wrap.visible { opacity: 1; transform: translate(-50%, 0); }
@@ -62,19 +65,25 @@ button { font: inherit; }
 .hero-card::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, transparent 42%, rgba(23,99,255,.18) 42% 56%, transparent 56%), repeating-linear-gradient(90deg, transparent 0 69px, rgba(255,255,255,.025) 70px); }
 .edition { position: absolute; top: 0; right: 0; padding: 8px 13px; color: #071326; background: var(--gold); font: 700 9px 'IBM Plex Mono'; letter-spacing: .08em; }
 .overline { position: relative; margin: 0 0 8px; color: var(--gold); font: 700 11px 'IBM Plex Mono'; letter-spacing: .24em; }
-h1 { position: relative; margin: 0; font: 900 clamp(64px, 10vw, 110px)/.67 'Barlow Condensed'; letter-spacing: -.045em; text-transform: uppercase; text-shadow: 0 6px 25px rgba(0,0,0,.45); }
+h1 { position: relative; margin: 0; font: 900 clamp(56px, 9vw, 96px)/.67 'Barlow Condensed'; letter-spacing: -.045em; text-transform: uppercase; text-shadow: 0 6px 25px rgba(0,0,0,.45); }
 h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
-.fixture { position: relative; display: grid; grid-template-columns: 1fr 60px 1fr; align-items: center; margin: 34px 0 20px; }
-.fixture > div { display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto auto; align-items: center; text-align: left; }
-.fixture > div:last-child { grid-template-columns: 1fr 52px; text-align: right; }
-.fixture > div:last-child .crest { grid-column: 2; grid-row: 1 / 3; }
-.fixture > div:last-child span, .fixture > div:last-child small { grid-column: 1; }
-.crest { grid-row: 1 / 3; width: 42px; height: 48px; display: grid; place-items: center; clip-path: polygon(50% 0, 95% 18%, 82% 80%, 50% 100%, 18% 80%, 5% 18%); font-style: normal; font-weight: 900; }
-.crest-a { background: var(--blue); color: white; }
-.crest-b { background: var(--red); color: white; }
-.fixture span { font-size: 22px; font-weight: 800; }
-.fixture small { color: #8fa3c0; font: 500 8px 'IBM Plex Mono'; letter-spacing: .1em; }
-.fixture b { color: var(--gold); font-size: 22px; }
+
+.setup-block { position: relative; margin-top: 24px; }
+.setup-label { letter-spacing: .2em; }
+.team-select { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 9px; }
+.team-chip { display: grid; place-items: center; gap: 3px; width: 62px; padding: 8px 0 6px; color: #fff; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.16); cursor: pointer; }
+.team-chip i { width: 30px; height: 36px; display: grid; place-items: center; clip-path: polygon(50% 0, 95% 18%, 82% 80%, 50% 100%, 18% 80%, 5% 18%); background: var(--chip, var(--blue)); font-style: normal; font-weight: 900; font-size: 15px; }
+.team-chip span { font: 600 9px 'IBM Plex Mono'; letter-spacing: .06em; }
+.team-chip:hover { border-color: rgba(255,255,255,.45); }
+.team-chip.selected { border-color: var(--gold); background: rgba(245,202,82,.12); box-shadow: 0 0 0 1px var(--gold); }
+.team-tagline { position: relative; margin: 9px 0 0; color: #9eb4d6; font: 600 9px 'IBM Plex Mono'; letter-spacing: .12em; }
+
+.setup-row { position: relative; display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap: 10px; margin: 16px 0 18px; }
+.pill-row { display: flex; gap: 5px; margin-top: 6px; }
+.pill-row button { flex: 1; padding: 7px 2px; color: #c9d7ee; background: transparent; border: 1px solid rgba(255,255,255,.22); cursor: pointer; font: 700 11px 'Barlow Condensed'; letter-spacing: .08em; }
+.pill-row button:hover { border-color: rgba(255,255,255,.5); }
+.pill-row button.selected { color: #071326; background: var(--gold); border-color: var(--gold); font-weight: 800; }
+
 .venue { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); margin-bottom: 20px; border-block: 1px solid rgba(255,255,255,.14); }
 .venue span { padding: 8px; color: #94a7c4; font: 600 9px 'IBM Plex Mono'; letter-spacing: .08em; border-right: 1px solid rgba(255,255,255,.14); }
 .venue span:last-child { border: 0; }
@@ -83,7 +92,9 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
 .primary small { font: 600 9px 'IBM Plex Mono'; opacity: .6; }
 .primary:hover, .primary:focus-visible { filter: brightness(1.09); transform: translateY(-2px); outline: 2px solid white; outline-offset: 2px; }
 .secondary { margin-top: 10px; color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.25); }
+.secondary:hover, .secondary:focus-visible { border-color: var(--gold); color: var(--gold); outline: none; }
 .menu-controls, .music-credit { position: relative; margin: 18px 0 0; color: #7d8da8; font: 500 8px 'IBM Plex Mono'; letter-spacing: .05em; }
+.career-line { margin-top: 14px; color: var(--gold); letter-spacing: .14em; }
 .music-credit { margin-top: 8px; color: #786f47; letter-spacing: .1em; }
 .modal-card { width: min(500px, 94vw); }
 .modal-card.compact h2, .result-card h2 { margin: 8px 0 26px; font-size: clamp(44px, 8vw, 76px); line-height: .85; }
@@ -115,6 +126,7 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
 .touch-button.utility { width: 46px; height: 46px; }
 #touchSwitch { left: 0; top: 8px; }
 #touchThrough { left: 52px; top: 0; }
+#touchLob { left: 104px; top: 10px; }
 #touchTackle { left: 17px; top: 61px; }
 #touchSprint { left: 70px; top: 55px; }
 .touch-button.pass { right: 82px; bottom: 5px; width: 64px; height: 64px; color: white; border: 2px solid #9dc5ff; background: linear-gradient(145deg, #2875ff, #0d47b8); }
@@ -138,18 +150,18 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
   .match-hud { top: max(74px, calc(env(safe-area-inset-top) + 66px)); bottom: auto; }
   .controls-hint { display: none; }
   .music-button { right: max(10px, env(safe-area-inset-right)); top: max(120px, calc(env(safe-area-inset-top) + 110px)); bottom: auto; padding: 7px 9px; font-size: 8px; }
+  .radar { right: auto; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom)); width: 72px; height: 112px; }
   .power-wrap { bottom: max(156px, calc(env(safe-area-inset-bottom) + 148px)); }
   .power-meter { width: 150px; }
   .overlay { padding: 12px; }
   .hero-card, .modal-card { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; padding: 26px 18px 18px; }
   .hero-card { width: min(650px, calc(100vw - 24px)); }
-  .fixture { margin: 24px 0 15px; }
-  .fixture span { font-size: 16px; }
-  .menu-controls { margin-top: 13px; font-size: 0; }
-  .menu-controls::after { content: 'TOUCH JOYSTICK TO MOVE - BLUE PASS - GOLD SHOOT'; font: 500 8px 'IBM Plex Mono'; }
+  .controls-line { margin-top: 13px; font-size: 0; }
+  .controls-line::after { content: 'TOUCH JOYSTICK TO MOVE - BLUE PASS - GOLD SHOOT'; font: 500 8px 'IBM Plex Mono'; }
   .penalty-panel { min-width: min(92vw, 430px); top: max(61px, calc(env(safe-area-inset-top) + 55px)); }
   .penalty-panel small { font-size: 0; }
   .penalty-panel small::after { content: 'MOVE JOYSTICK TO AIM - HOLD GOLD BUTTON FOR POWER'; font: 500 8px 'IBM Plex Mono'; }
+  .penalty-panel[data-mode="keep"] small::after { content: 'MOVE JOYSTICK TO DIVE - SAVE THE PENALTY'; }
 }
 
 @media (max-width: 520px) and (orientation: portrait) {
@@ -159,16 +171,15 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
   .match-hud { top: 66px; left: auto; right: 8px; transform: none; }
   .music-button { top: 102px; }
   .touch-pause { top: 138px; }
-  h1 { font-size: clamp(50px, 18vw, 76px); }
+  h1 { font-size: clamp(44px, 16vw, 68px); }
   .hero-card { padding-top: 28px; }
-  .fixture { grid-template-columns: 1fr 34px 1fr; }
-  .fixture > div { grid-template-columns: 37px 1fr; }
-  .fixture > div:last-child { grid-template-columns: 1fr 37px; }
-  .crest { width: 32px; height: 38px; }
-  .fixture span { font-size: 13px; }
-  .fixture small { display: none; }
+  .team-chip { width: 52px; }
+  .team-chip i { width: 26px; height: 31px; font-size: 12px; }
+  .setup-row { grid-template-columns: 1fr; gap: 8px; margin: 13px 0 14px; }
+  .pill-row { margin-top: 4px; }
   .venue span { padding: 7px 3px; font-size: 7px; }
   .joystick { width: 104px; height: 104px; }
+  .radar { left: 50%; transform: translateX(-50%); top: 108px; bottom: auto; width: 56px; height: 88px; }
   .touch-actions { transform: scale(.82); transform-origin: right bottom; }
   .match-message { top: 19%; max-width: 90vw; white-space: nowrap; font-size: 18px; }
 }

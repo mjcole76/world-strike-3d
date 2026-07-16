@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#071326" />
-    <meta name="description" content="World Strike 3D - lead Aurora through a cinematic 5v5 championship final." />
+    <meta name="description" content="World Strike 3D - lead your club through a cinematic 5v5 championship under the lights." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>World Strike 3D - The World Crown Final</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>World Strike 3D - The World Crown</title>
   </head>
   <body>
     <main id="app">
@@ -16,9 +20,9 @@
       <header class="broadcast-bar">
         <div class="competition-mark"><span>WS</span><strong>WORLD<br />CROWN</strong></div>
         <div class="scoreboard">
-          <div class="team aurora"><span>AUR</span><i></i></div>
+          <div class="team home"><span id="homeShort">AUR</span><i id="homeChip"></i></div>
           <strong id="score">0&nbsp;&nbsp;-&nbsp;&nbsp;0</strong>
-          <div class="team atlas"><i></i><span>ATL</span></div>
+          <div class="team away"><i id="awayChip"></i><span id="awayShort">ATL</span></div>
         </div>
         <div id="clock" class="clock">03:00</div>
       </header>
@@ -30,7 +34,7 @@
 
       <section class="match-hud">
         <span id="possession" class="possession">LOOSE BALL</span>
-        <span class="controls-hint">WASD MOVE&nbsp;&nbsp; SPACE PASS / SHOOT&nbsp;&nbsp; E THROUGH&nbsp;&nbsp; F TACKLE&nbsp;&nbsp; Q SWITCH</span>
+        <span class="controls-hint">WASD MOVE&nbsp;&nbsp; SPACE PASS / SHOOT&nbsp;&nbsp; E THROUGH&nbsp;&nbsp; C CHIP&nbsp;&nbsp; F TACKLE&nbsp;&nbsp; Q SWITCH</span>
       </section>
 
       <section id="powerWrap" class="power-wrap">
@@ -38,6 +42,7 @@
       </section>
 
       <div id="matchMessage" class="match-message" role="status">KICK OFF</div>
+      <canvas id="radar" class="radar" width="128" height="200" aria-hidden="true"></canvas>
       <button id="musicButton" class="music-button" type="button">MUSIC ON</button>
 
       <section id="touchControls" class="touch-controls" aria-label="Mobile match controls">
@@ -45,6 +50,7 @@
         <div class="touch-actions">
           <button id="touchSwitch" class="touch-button utility" type="button"><strong>Q</strong><span>SWITCH</span></button>
           <button id="touchThrough" class="touch-button utility" type="button"><strong>E</strong><span>THROUGH</span></button>
+          <button id="touchLob" class="touch-button utility" type="button"><strong>C</strong><span>CHIP</span></button>
           <button id="touchTackle" class="touch-button utility" type="button"><strong>F</strong><span>TACKLE</span></button>
           <button id="touchSprint" class="touch-button utility sprint" type="button"><strong>⇧</strong><span>SPRINT</span></button>
           <button id="touchPass" class="touch-button pass" type="button"><strong>↗</strong><span>PASS</span></button>
@@ -56,16 +62,42 @@
       <section id="menu" class="overlay visible">
         <div class="hero-card">
           <div class="edition">CHAMPIONSHIP EDITION // 2026</div>
-          <p class="overline">THE WORLD CROWN FINAL</p>
+          <p class="overline">THE WORLD CROWN</p>
           <h1>WORLD<br /><em>STRIKE</em> 3D</h1>
-          <div class="fixture">
-            <div><i class="crest crest-a">A</i><span>TEAM AURORA</span><small>THE NORTHERN LIGHT</small></div>
-            <b>VS</b>
-            <div><i class="crest crest-b">A</i><span>TEAM ATLAS</span><small>THE CRIMSON WALL</small></div>
+          <div class="setup-block">
+            <span class="label setup-label">SELECT YOUR CLUB</span>
+            <div id="teamSelect" class="team-select"></div>
+            <p id="teamTagline" class="team-tagline">TEAM AURORA - THE NORTHERN LIGHT</p>
           </div>
-          <div class="venue"><span>CROWN ARENA</span><span>NIGHT FINAL</span><span>5 VS 5</span></div>
-          <button id="startButton" class="primary" type="button"><span>ENTER THE FINAL</span><small>3 MINUTE MATCH</small></button>
-          <p class="menu-controls">WASD MOVE - SPACE PASS/SHOOT - E THROUGH BALL - F TACKLE - Q SWITCH</p>
+          <div class="setup-row">
+            <div class="setup-group">
+              <span class="label">MODE</span>
+              <div id="modeSelect" class="pill-row">
+                <button type="button" data-value="friendly">FRIENDLY</button>
+                <button type="button" data-value="cup">CROWN CUP</button>
+              </div>
+            </div>
+            <div class="setup-group">
+              <span class="label">DIFFICULTY</span>
+              <div id="difficultySelect" class="pill-row">
+                <button type="button" data-value="easy">EASY</button>
+                <button type="button" data-value="pro">PRO</button>
+                <button type="button" data-value="legend">LEGEND</button>
+              </div>
+            </div>
+            <div class="setup-group">
+              <span class="label">MATCH LENGTH</span>
+              <div id="lengthSelect" class="pill-row">
+                <button type="button" data-value="120">2 MIN</button>
+                <button type="button" data-value="180">3 MIN</button>
+                <button type="button" data-value="300">5 MIN</button>
+              </div>
+            </div>
+          </div>
+          <div class="venue"><span>CROWN ARENA</span><span>NIGHT MATCH</span><span>5 VS 5</span></div>
+          <button id="startButton" class="primary" type="button"><span>ENTER THE ARENA</span><small id="startNote">3 MINUTE MATCH</small></button>
+          <p id="careerLine" class="menu-controls career-line">CUPS WON 0 - MATCHES WON 0</p>
+          <p class="menu-controls controls-line">WASD MOVE - SPACE PASS/SHOOT - E THROUGH - C CHIP - F TACKLE - Q SWITCH - GAMEPAD SUPPORTED</p>
           <p class="music-credit">ORIGINAL MATCH SCORE GENERATED WITH TREBLO</p>
         </div>
       </section>
@@ -74,15 +106,16 @@
         <div class="modal-card compact">
           <p class="overline">TACTICAL BREAK</p>
           <h2>MATCH PAUSED</h2>
-          <button id="resumeButton" class="primary" type="button">RESUME FINAL</button>
+          <button id="resumeButton" class="primary" type="button">RESUME MATCH</button>
           <button id="pauseRestartButton" class="secondary" type="button">RESTART MATCH</button>
+          <button id="pauseExitButton" class="secondary" type="button">EXIT TO MENU</button>
         </div>
       </section>
 
-      <section id="penaltyPanel" class="penalty-panel">
+      <section id="penaltyPanel" class="penalty-panel" data-mode="shoot">
         <span>PENALTY SHOOTOUT</span>
         <strong id="penaltyScore">AUR ○ ○ ○ &nbsp; ATL ○ ○ ○</strong>
-        <small>BEST OF THREE - A/D AIM - HOLD SPACE FOR POWER</small>
+        <small id="penaltyHint">BEST OF THREE - A/D AIM - HOLD SPACE FOR POWER</small>
       </section>
 
       <section id="result" class="overlay">
@@ -93,6 +126,7 @@
           <p id="resultDetail">A championship performance under the lights.</p>
           <div class="final-score"><span>FINAL SCORE</span><strong id="finalScore">AUR 0 - 0 ATL</strong></div>
           <button id="restartButton" class="primary" type="button">PLAY AGAIN</button>
+          <button id="menuButton" class="secondary" type="button">BACK TO MENU</button>
         </div>
       </section>
     </main>

@@ -1,6 +1,6 @@
 # World Strike 3D
 
-Lead Team Aurora through a cinematic 5v5 championship final against Team Atlas in Crown Arena.
+Pick one of six fictional clubs and fight through cinematic 5v5 matches in Crown Arena - as a one-off friendly or a three-round Crown Cup run (quarter-final, semi-final, final).
 
 ## Play
 
@@ -9,27 +9,38 @@ Lead Team Aurora through a cinematic 5v5 championship final against Team Atlas i
 - **Space tap** - precision pass
 - **Space hold and release** - power shot
 - **E** - through ball
+- **C** - chip / lob over the keeper
 - **F** - standing tackle
 - **Q** - switch player
 - **Escape** - pause
 - **M / music button** - music control
 
+### Gamepad
+
+- Left stick - move / aim
+- **A** pass, **B** tackle, **X** hold to shoot, **Y** switch
+- **LB** chip, **RB** through ball, **RT/LT** sprint, **Start** pause
+
 ### Mobile
 
-- Left virtual joystick - move and aim penalties
+- Left virtual joystick - move, aim penalties, dive as keeper
 - Blue Pass button - immediate grounded pass
 - Gold Shoot button - always shoots; hold for more power
-- Switch, Through, Tackle and Sprint touch buttons
+- Switch, Through, Chip, Tackle and Sprint touch buttons
 - Dedicated pause button
 - Portrait and landscape layouts with safe-area support
+- Installable as a PWA (offline-capable via a service worker)
 
 ## Match format
 
-- Three-minute 5v5 arcade final
-- AI teammates and opponents
-- Goalkeepers, tackling, possession, passing, shooting and stamina
-- Direct best-of-three penalty shootout after a tied match
-- Victory, defeat, pause and restart loops
+- 5v5 arcade matches (2, 3 or 5 minutes) with AI teammates and opponents
+- Three difficulty tiers (Easy / Pro / Legend) that scale AI speed, tackling pressure, keeper reach and finishing
+- Opponents can dispossess you - protect the ball
+- Throw-ins, corners and goal kicks when the ball leaves play
+- Goal celebrations with a camera orbit, confetti and crowd roar; reactive crowd ambience all match
+- Best-of-three penalty shootout after a draw, with sudden death - you take your kicks **and** play as the keeper for theirs
+- Radar minimap so you can find teammates for through balls
+- Team choice, mode, difficulty, match length, music setting and career record (cups and match wins) persist in localStorage
 
 ## Original score
 
@@ -56,7 +67,9 @@ npm run build
 - TypeScript
 - Vite
 - WebGL
-- Web Audio API
+- Web Audio API (SFX, crowd ambience, roars)
+- Gamepad API
+- PWA (web app manifest + service worker)
 - Treblo v3 original music
 
 The teams, competition, stadium, crests and presentation are fictional. No real tournament branding or player likenesses are used.

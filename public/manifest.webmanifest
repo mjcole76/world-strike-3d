@@ -1,0 +1,13 @@
+{
+  "name": "World Strike 3D - The World Crown",
+  "short_name": "World Strike 3D",
+  "description": "Lead your club through a cinematic 5v5 championship under the lights.",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#020713",
+  "theme_color": "#071326",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
