@@ -1,5 +1,6 @@
 export type Team = 'home' | 'away';
-export type MatchPhase = 'menu' | 'playing' | 'celebration' | 'paused' | 'penalty' | 'finished';
+export type MatchPhase = 'menu' | 'playing' | 'celebration' | 'paused' | 'penalty' | 'freekick' | 'finished';
+export type Role = 'GK' | 'DEF' | 'MID' | 'ST';
 
 export interface Score { home: number; away: number }
 

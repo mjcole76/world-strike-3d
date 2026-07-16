@@ -42,6 +42,54 @@ export function whistle(long = false): void {
   setTimeout(() => sfx(1450, long ? .55 : .18, 'sine', .025, 1900), long ? 260 : 110);
 }
 
+/** One sharp blast - fouls and stoppages. */
+export function foulWhistle(): void {
+  sfx(1850, .32, 'sine', .034, 1600);
+}
+
+/** Kick thump that scales with power (0..1) - soft taps to full volleys. */
+export function kickSound(power: number): void {
+  const p = Math.max(0, Math.min(1, power));
+  sfx(150 - p * 75, .09 + p * .13, p > .6 ? 'triangle' : 'sine', .035 + p * .035, 40);
+}
+
+/** High-frequency noise flick for the ball hitting the net. */
+export function netSwish(): void {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const source = ctx.createBufferSource();
+  source.buffer = noise();
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 2600;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(.05, now);
+  gain.gain.exponentialRampToValueAtTime(.001, now + .28);
+  source.connect(filter).connect(gain).connect(ctx.destination);
+  source.start();
+  source.stop(now + .3);
+}
+
+/** Low disappointed murmur for misses and near things. */
+export function crowdOoh(): void {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const source = ctx.createBufferSource();
+  source.buffer = noise();
+  source.loop = true;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 340;
+  filter.Q.value = .9;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(.0001, now);
+  gain.gain.exponentialRampToValueAtTime(.07, now + .1);
+  gain.gain.exponentialRampToValueAtTime(.001, now + .9);
+  source.connect(filter).connect(gain).connect(ctx.destination);
+  source.start();
+  source.stop(now + 1);
+}
+
 /** Looping filtered-noise ambience that swells with `setCrowdExcitement`. */
 export function startCrowd(): void {
   ensureAudio();

@@ -1,6 +1,7 @@
 import type { DifficultyId } from './gameCore';
+import type { LeagueState } from './league';
 
-export type MatchMode = 'friendly' | 'cup';
+export type MatchMode = 'friendly' | 'versus' | 'cup' | 'league';
 
 export interface SaveData {
   muted: boolean;
@@ -9,12 +10,14 @@ export interface SaveData {
   mode: MatchMode;
   matchLength: number;
   cupsWon: number;
+  titles: number;
   wins: number;
+  league: LeagueState | null;
 }
 
 const KEY = 'world-strike-3d:v1';
 
-const DEFAULTS: SaveData = { muted: false, difficulty: 'pro', teamId: 'aurora', mode: 'friendly', matchLength: 180, cupsWon: 0, wins: 0 };
+const DEFAULTS: SaveData = { muted: false, difficulty: 'pro', teamId: 'aurora', mode: 'friendly', matchLength: 180, cupsWon: 0, titles: 0, wins: 0, league: null };
 
 export function loadSave(): SaveData {
   try {

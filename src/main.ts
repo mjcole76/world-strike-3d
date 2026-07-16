@@ -2,15 +2,15 @@ import * as THREE from 'three';
 import './style.css';
 import {
   attackDirection, clamp, classifyRestart, detectGoal, DIFFICULTIES, formatClock, otherTeam,
-  regulationResult, shootoutWinner, type Difficulty, type MatchPhase, type Restart, type Score, type Team,
+  regulationResult, shootoutWinner, type Difficulty, type MatchPhase, type Restart, type Role, type Score, type Team,
 } from './gameCore';
-import { TEAMS, teamById, type TeamInfo } from './teams';
+import { ROLE_SKILL, ROLE_SPEED, TEAMS, teamById, type TeamInfo } from './teams';
+import { applyResult, createLeague, ordinal, simulateScore, sortTable, type LeagueState } from './league';
 import { loadSave, saveData, type MatchMode } from './storage';
 import * as audio from './audio';
-import { applyKit, BALL_Y, buildPitch, buildStadium, createBall, createConfetti, createPlayerMesh, FIELD_W, GOAL_W } from './world';
+import { applyKit, BALL_Y, buildPitch, buildStadium, createBall, createConfetti, createPlayerMesh, createTrail, FIELD_W, GOAL_W } from './world';
 import { createRadar } from './radar';
 
-type Role = 'GK' | 'DEF' | 'MID' | 'ST';
 interface Footballer {
   id: number;
   team: Team;
@@ -28,6 +28,7 @@ interface DebugApi {
   getState: () => Record<string, unknown>;
   setTime: (seconds: number) => void;
   forceGoal: (team: Team) => void;
+  forceFreeKick: () => void;
   start: () => void;
 }
 declare global { interface Window { __worldStrike: DebugApi } }
@@ -64,6 +65,8 @@ const teamTagline = $('#teamTagline');
 const careerLine = $('#careerLine');
 const startNote = $('#startNote');
 const restartButton = $('#restartButton') as HTMLButtonElement;
+const matchStatsNode = $('#matchStats');
+const leagueBoxNode = $('#leagueBox');
 const radarCanvas = $('#radar') as HTMLCanvasElement;
 const radar = createRadar(radarCanvas);
 
@@ -114,6 +117,7 @@ let difficulty: Difficulty = DIFFICULTIES[save.difficulty] ?? DIFFICULTIES.pro;
 let matchLength = save.matchLength;
 let mode: MatchMode = save.mode;
 let cup: { round: number; opponents: string[] } | null = null;
+let leagueState: LeagueState | null = null;
 const ROUNDS = ['QUARTER-FINAL', 'SEMI-FINAL', 'FINAL'];
 
 let phase: MatchPhase = 'menu';
@@ -123,15 +127,20 @@ let possessor: Footballer | null = null;
 let trackedPossessor: Footballer | null = null;
 let possessionTime = 0;
 let controlled: Footballer;
+let controlled2: Footballer | null = null;
 let shotCharge = 0;
 let charging = false;
+let p2Charge = 0;
+let p2Charging = false;
 let messageTimer = 0;
 let celebrationTimer = 0;
+let shakeTimer = 0;
 let kickoffTeam: Team = 'home';
 let lastTouch: Team = 'home';
 let lastKicker: Footballer | null = null;
 let lastScorer: Team = 'home';
 const celebrationFocus = new THREE.Vector3();
+const freeKickSpot = new THREE.Vector3();
 let crowdTick = 0;
 let penaltyAim = 0;
 let penaltyMode: 'shoot' | 'keep' = 'shoot';
@@ -142,10 +151,21 @@ let homePens: boolean[] = [];
 let awayPens: boolean[] = [];
 let primaryAction: () => void = () => startMatch();
 
+interface MatchStats {
+  shots: Score; saves: Score; fouls: Score; cards: Score; corners: Score; possession: Score;
+}
+const emptyStats = (): MatchStats => ({
+  shots: { home: 0, away: 0 }, saves: { home: 0, away: 0 }, fouls: { home: 0, away: 0 },
+  cards: { home: 0, away: 0 }, corners: { home: 0, away: 0 }, possession: { home: 0, away: 0 },
+});
+let stats = emptyStats();
+
 buildPitch(scene);
 buildStadium(scene);
 const confetti = createConfetti();
 scene.add(confetti.points);
+const trail = createTrail();
+scene.add(trail.points);
 
 const formation: Array<[Role, number, number, number]> = [
   ['GK', 1, 0, 47], ['DEF', 4, -13, 27], ['DEF', 5, 13, 27], ['MID', 8, -4, 8], ['ST', 10, 4, -8],
@@ -171,6 +191,11 @@ selectionRing.position.y = .05;
 scene.add(selectionRing);
 const selectionArrow = new THREE.Mesh(new THREE.ConeGeometry(.25, .55, 8), new THREE.MeshBasicMaterial({ color: 0xf5ca52 }));
 scene.add(selectionArrow);
+const selectionRing2 = new THREE.Mesh(new THREE.RingGeometry(.72, .9, 28), new THREE.MeshBasicMaterial({ color: 0xff5470, side: THREE.DoubleSide, transparent: true, opacity: .95 }));
+selectionRing2.rotation.x = -Math.PI / 2;
+selectionRing2.position.y = .05;
+selectionRing2.visible = false;
+scene.add(selectionRing2);
 
 const ball = createBall();
 scene.add(ball);
@@ -190,6 +215,18 @@ function showMessage(text: string, duration = 1.7): void {
 
 function teamInfo(team: Team): TeamInfo {
   return team === 'home' ? homeInfo : awayInfo;
+}
+
+function playerPace(player: Footballer): number {
+  return ROLE_SPEED[player.role] * teamInfo(player.team).speed;
+}
+
+function playerSkill(player: Footballer): number {
+  return ROLE_SKILL[player.role] * teamInfo(player.team).skill;
+}
+
+function strengthOf(info: TeamInfo): number {
+  return info.skill * .6 + info.speed * .4;
 }
 
 function applyTeamKits(): void {
@@ -249,13 +286,28 @@ function randomOpponent(): TeamInfo {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function setLeagueOpponent(): void {
+  if (!leagueState) return;
+  const fixture = leagueState.rounds[leagueState.round].find((f) => f.home === homeInfo.id || f.away === homeInfo.id)!;
+  awayInfo = teamById(fixture.home === homeInfo.id ? fixture.away : fixture.home);
+}
+
 function beginCampaign(): void {
   save = saveData({ teamId: homeInfo.id, difficulty: difficulty.id, mode, matchLength });
+  cup = null;
+  leagueState = null;
   if (mode === 'cup') {
     cup = { round: 0, opponents: drawCupOpponents() };
     awayInfo = teamById(cup.opponents[0]);
+  } else if (mode === 'league') {
+    let lg = save.league;
+    if (!lg || lg.playerTeam !== homeInfo.id || lg.round >= lg.rounds.length) {
+      lg = createLeague(TEAMS.map((t) => t.id), homeInfo.id);
+    }
+    leagueState = lg;
+    save = saveData({ league: lg });
+    setLeagueOpponent();
   } else {
-    cup = null;
     awayInfo = randomOpponent();
   }
   startMatch();
@@ -263,6 +315,7 @@ function beginCampaign(): void {
 
 function startMatch(): void {
   score = { home: 0, away: 0 };
+  stats = emptyStats();
   timeLeft = matchLength;
   homePens = [];
   awayPens = [];
@@ -270,6 +323,8 @@ function startMatch(): void {
   touchMoveX = 0;
   touchMoveZ = 0;
   touchSprint = false;
+  p2Charging = false;
+  p2Charge = 0;
   joystickKnob.style.transform = 'translate(-50%, -50%)';
   applyTeamKits();
   phase = 'playing';
@@ -283,13 +338,19 @@ function startMatch(): void {
   audio.ensureAudio();
   audio.startCrowd();
   resetPositions('home');
+  controlled2 = mode === 'versus' ? players.find((p) => p.team === 'away' && p.role === 'ST')! : null;
+  selectionRing2.visible = !!controlled2;
   if (cup) showMessage(`${ROUNDS[cup.round]} - ${awayInfo.name}`, 2.2);
+  if (leagueState) showMessage(`ROUND ${leagueState.round + 1}/${leagueState.rounds.length} - ${awayInfo.name}`, 2.2);
   updateHud();
 }
 
 function returnToMenu(): void {
   phase = 'menu';
   cup = null;
+  leagueState = null;
+  controlled2 = null;
+  selectionRing2.visible = false;
   penaltyInFlight = false;
   penaltyAimMarker.visible = false;
   resultOverlay.classList.remove('visible');
@@ -300,6 +361,7 @@ function returnToMenu(): void {
   soundtrack.volume = .22;
   resetPositions('home');
   refreshCareerLine();
+  refreshStartNote();
   updateHud();
 }
 
@@ -313,6 +375,12 @@ function switchPlayer(): void {
   audio.sfx(660, .08, 'square', .018, 820);
 }
 
+function switchPlayer2(): void {
+  if (!controlled2) return;
+  controlled2 = closestPlayer('away', ball.position, false);
+  audio.sfx(660, .08, 'square', .018, 820);
+}
+
 function kick(from: Footballer, target: THREE.Vector3, speed: number, lift: number): void {
   possessor = null;
   lastTouch = from.team;
@@ -323,7 +391,7 @@ function kick(from: Footballer, target: THREE.Vector3, speed: number, lift: numb
   direction.normalize();
   ballVelocity.set(direction.x * speed, lift, direction.z * speed);
   from.cooldown = .35;
-  audio.sfx(105, .12, 'sine', .055, 62);
+  audio.kickSound(clamp(speed / 48, 0, 1));
 }
 
 function bestPassTarget(from: Footballer, through = false): Footballer {
@@ -340,55 +408,119 @@ function bestPassTarget(from: Footballer, through = false): Footballer {
   });
 }
 
-function passBall(through = false): void {
-  if (possessor !== controlled || phase !== 'playing') return;
-  const targetPlayer = bestPassTarget(controlled, through);
+function passFrom(from: Footballer | null, through = false): void {
+  if (!from || possessor !== from || phase !== 'playing') return;
+  const targetPlayer = bestPassTarget(from, through);
   const lead = targetPlayer.velocity.clone().multiplyScalar(through ? .65 : .25);
   const target = targetPlayer.mesh.position.clone().add(lead);
-  kick(controlled, target, through ? 27 : 20, through ? 1.1 : .45);
-  showMessage(through ? 'THROUGH BALL' : 'PRECISION PASS', .8);
+  kick(from, target, through ? 27 : 20, through ? 1.1 : .45);
+  if (from === controlled) showMessage(through ? 'THROUGH BALL' : 'PRECISION PASS', .8);
 }
 
-function shootBall(power: number): void {
-  if (possessor !== controlled) return;
-  const direction = attackDirection(controlled.team);
+function shootFrom(from: Footballer | null, power: number): void {
+  if (!from || possessor !== from) return;
+  const direction = attackDirection(from.team);
   const goalZ = direction * 53;
-  const movementBias = controlled.velocity.x * .065;
-  const error = (Math.random() - .5) * (power > .92 ? 3.6 : 1.4) * (2 - homeInfo.skill);
-  const targetX = phase === 'penalty' ? penaltyAim : clamp(movementBias + error, -7.6, 7.6);
-  kick(controlled, new THREE.Vector3(targetX, 0, goalZ), 25 + power * 25, 2.8 + power * 4.4);
-  audio.sfx(78, .2, 'triangle', .055, 42);
-  if (phase === 'playing') showMessage('POWER SHOT', .7);
-  if (phase === 'penalty') {
+  const movementBias = from.velocity.x * .065;
+  const error = (Math.random() - .5) * (power > .92 ? 3.6 : 1.4) * (2 - playerSkill(from));
+  const aimed = from === controlled && (phase === 'penalty' || phase === 'freekick');
+  const targetX = aimed ? penaltyAim : clamp(movementBias + error, -7.6, 7.6);
+  stats.shots[from.team] += 1;
+  kick(from, new THREE.Vector3(targetX, 0, goalZ), 25 + power * 25, 2.8 + power * 4.4);
+  if (phase === 'freekick') {
+    penaltyAimMarker.visible = false;
+    phase = 'playing';
+    showMessage('FREE KICK STRIKE', .8);
+  } else if (phase === 'penalty') {
     penaltyInFlight = true;
     penaltyTimer = 0;
+  } else if (phase === 'playing' && from === controlled) {
+    showMessage('POWER SHOT', .7);
   }
 }
 
-function lobBall(): void {
-  if (possessor !== controlled || phase !== 'playing') return;
-  const direction = attackDirection(controlled.team);
-  const targetX = clamp(controlled.mesh.position.x * .4 + controlled.velocity.x * .1, -7, 7);
-  kick(controlled, new THREE.Vector3(targetX, 0, direction * 52), 16.5, 7.2);
-  showMessage('CHIP', .7);
-  audio.sfx(90, .16, 'triangle', .05, 50);
+function lobFrom(from: Footballer | null): void {
+  if (!from || possessor !== from || phase !== 'playing') return;
+  const direction = attackDirection(from.team);
+  const targetX = clamp(from.mesh.position.x * .4 + from.velocity.x * .1, -7, 7);
+  stats.shots[from.team] += 1;
+  kick(from, new THREE.Vector3(targetX, 0, direction * 52), 16.5, 7.2);
+  if (from === controlled) showMessage('CHIP', .7);
 }
 
-function tackle(): void {
-  if (phase !== 'playing' || controlled.tackle > 0) return;
-  controlled.tackle = .65;
-  const enemy = players.filter((p) => p.team === 'away').sort((a, b) => a.mesh.position.distanceTo(controlled.mesh.position) - b.mesh.position.distanceTo(controlled.mesh.position))[0];
-  if (enemy && possessor === enemy && enemy.mesh.position.distanceTo(controlled.mesh.position) < 2.1) {
-    possessor = controlled;
-    showMessage('INTERCEPTION', .9);
+function handleFoul(offender: Footballer, victim: Footballer): void {
+  stats.fouls[offender.team] += 1;
+  offender.tackle = .8;
+  possessor = null;
+  ballVelocity.set(0, 0, 0);
+  audio.foulWhistle();
+  audio.crowdOoh();
+  const carded = Math.random() < .3;
+  if (carded) stats.cards[offender.team] += 1;
+  const attackingSpot = victim.team === 'home' && victim.mesh.position.z < -12;
+  if (attackingSpot) {
+    startFreeKick(victim, carded);
+    return;
+  }
+  possessor = victim;
+  victim.cooldown = 0;
+  if (victim.team === 'home') setControlled(victim);
+  showMessage(carded ? `FOUL - ${teamInfo(offender.team).short} YELLOW CARD` : 'FREE KICK', 1.2);
+}
+
+function startFreeKick(taker: Footballer, carded: boolean): void {
+  phase = 'freekick';
+  charging = false;
+  shotCharge = 0;
+  penaltyAim = 0;
+  freeKickSpot.copy(taker.mesh.position);
+  freeKickSpot.z = clamp(freeKickSpot.z, -34, -12);
+  freeKickSpot.x = clamp(freeKickSpot.x, -24, 24);
+  taker.mesh.position.set(freeKickSpot.x, 0, freeKickSpot.z + 2);
+  taker.velocity.set(0, 0, 0);
+  taker.mesh.rotation.y = Math.PI;
+  ball.position.set(freeKickSpot.x, BALL_Y, freeKickSpot.z);
+  ballVelocity.set(0, 0, 0);
+  possessor = taker;
+  setControlled(taker);
+  penaltyAimMarker.visible = true;
+  penaltyAimMarker.position.x = 0;
+  const toGoal = new THREE.Vector3(-freeKickSpot.x, 0, -52 - freeKickSpot.z).normalize();
+  const perp = new THREE.Vector3(-toGoal.z, 0, toGoal.x);
+  const wall = players
+    .filter((p) => p.team === 'away' && p.role !== 'GK')
+    .sort((a, b) => a.mesh.position.distanceTo(freeKickSpot) - b.mesh.position.distanceTo(freeKickSpot))
+    .slice(0, 2);
+  wall.forEach((defender, i) => {
+    defender.mesh.position.copy(freeKickSpot).addScaledVector(toGoal, 6).addScaledVector(perp, i === 0 ? .75 : -.75);
+    defender.velocity.set(0, 0, 0);
+    defender.mesh.rotation.y = Math.atan2(-toGoal.x, -toGoal.z) + Math.PI;
+  });
+  showMessage(carded ? 'YELLOW CARD - DIRECT FREE KICK' : 'DIRECT FREE KICK', 1.5);
+}
+
+function tackleFor(tackler: Footballer | null): void {
+  if (!tackler || phase !== 'playing' || tackler.tackle > 0) return;
+  tackler.tackle = .65;
+  const enemyTeam = otherTeam(tackler.team);
+  const enemy = players.filter((p) => p.team === enemyTeam).sort((a, b) => a.mesh.position.distanceTo(tackler.mesh.position) - b.mesh.position.distanceTo(tackler.mesh.position))[0];
+  if (enemy && possessor === enemy && enemy.mesh.position.distanceTo(tackler.mesh.position) < 2.1) {
+    if (Math.random() < .22) {
+      handleFoul(tackler, enemy);
+      return;
+    }
+    possessor = tackler;
+    if (tackler === controlled || tackler === controlled2) showMessage('INTERCEPTION', .9);
     audio.sfx(150, .1, 'square', .04, 80);
   }
 }
 
 function updateControlled(dt: number): void {
-  if (phase !== 'playing' && phase !== 'penalty') return;
-  let x = clamp(touchMoveX + gamepadX, -1, 1);
-  let z = clamp(touchMoveZ + gamepadZ, -1, 1);
+  if (phase !== 'playing' && phase !== 'penalty' && phase !== 'freekick') return;
+  const padX = controlled2 ? 0 : gamepadX;
+  const padZ = controlled2 ? 0 : gamepadZ;
+  let x = clamp(touchMoveX + padX, -1, 1);
+  let z = clamp(touchMoveZ + padZ, -1, 1);
   if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
   if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
   if (keys.has('KeyW') || keys.has('ArrowUp')) z -= 1;
@@ -396,8 +528,8 @@ function updateControlled(dt: number): void {
   x = clamp(x, -1, 1);
   z = clamp(z, -1, 1);
 
-  if (phase === 'penalty') {
-    if (penaltyMode === 'shoot') {
+  if (phase === 'penalty' || phase === 'freekick') {
+    if (phase === 'freekick' || penaltyMode === 'shoot') {
       penaltyAim = clamp(penaltyAim + x * dt * 7, -7.7, 7.7);
       penaltyAimMarker.position.x = penaltyAim;
       controlled.velocity.set(0, 0, 0);
@@ -411,8 +543,8 @@ function updateControlled(dt: number): void {
   }
 
   const moving = x !== 0 || z !== 0;
-  const sprint = (keys.has('ShiftLeft') || touchSprint || gamepadSprint) && moving && controlled.stamina > 1;
-  const speed = (sprint ? 13 : 8.3) * homeInfo.speed;
+  const sprint = (keys.has('ShiftLeft') || touchSprint || (!controlled2 && gamepadSprint)) && moving && controlled.stamina > 1;
+  const speed = (sprint ? 13 : 8.3) * playerPace(controlled);
   if (moving) {
     const length = Math.hypot(x, z);
     x /= length; z /= length;
@@ -427,6 +559,27 @@ function updateControlled(dt: number): void {
   controlled.stamina = clamp(controlled.stamina + (sprint ? -29 : 17) * dt, 0, 100);
 }
 
+function updateControlled2(dt: number): void {
+  if (!controlled2 || phase !== 'playing') return;
+  let x = clamp(gamepadX, -1, 1);
+  let z = clamp(gamepadZ, -1, 1);
+  const moving = x !== 0 || z !== 0;
+  const sprint = gamepadSprint && moving && controlled2.stamina > 1;
+  const speed = (sprint ? 13 : 8.3) * playerPace(controlled2);
+  if (moving) {
+    const length = Math.hypot(x, z);
+    x /= length; z /= length;
+    controlled2.velocity.set(x * speed, 0, z * speed);
+    const nx = clamp(controlled2.mesh.position.x + controlled2.velocity.x * dt, -31.2, 31.2);
+    const nz = clamp(controlled2.mesh.position.z + controlled2.velocity.z * dt, -50.8, 50.8);
+    controlled2.mesh.position.set(nx, 0, nz);
+    controlled2.mesh.rotation.y = Math.atan2(x, z);
+  } else {
+    controlled2.velocity.multiplyScalar(Math.pow(.04, dt));
+  }
+  controlled2.stamina = clamp(controlled2.stamina + (sprint ? -29 : 17) * dt, 0, 100);
+}
+
 function targetForAi(player: Footballer): THREE.Vector3 {
   const direction = attackDirection(player.team);
   const ownBall = possessor?.team === player.team;
@@ -436,6 +589,17 @@ function targetForAi(player: Footballer): THREE.Vector3 {
   }
   const nearest = closestPlayer(player.team, ball.position, false) === player;
   if (!ownBall && nearest) return ball.position.clone();
+  if (ownBall && possessor !== player) {
+    if (player.role === 'ST') {
+      const aheadZ = clamp(ball.position.z + direction * 16, -46, 46);
+      return new THREE.Vector3(clamp(-ball.position.x * .5 + player.home.x * .7, -26, 26), 0, aheadZ);
+    }
+    if (player.role === 'MID') {
+      const supportZ = clamp(ball.position.z + direction * 7, -44, 44);
+      return new THREE.Vector3(clamp(ball.position.x * .4 + player.home.x * .5, -28, 28), 0, supportZ);
+    }
+    return player.home.clone().add(new THREE.Vector3(ball.position.x * .16, 0, direction * 8 + ball.position.z * .15));
+  }
   const shift = ownBall ? direction * 9 : -direction * 3;
   const ballPull = new THREE.Vector3(ball.position.x * .16, 0, ball.position.z * .1);
   return player.home.clone().add(new THREE.Vector3(0, 0, shift)).add(ballPull);
@@ -447,19 +611,23 @@ function attemptSteal(player: Footballer, dt: number): void {
   if (player.mesh.position.distanceTo(possessor.mesh.position) > 1.7) return;
   const rate = player.team === 'away' ? difficulty.stealRate : .8;
   if (Math.random() >= rate * dt) return;
+  if (Math.random() < .16) {
+    handleFoul(player, possessor);
+    return;
+  }
   const victim = possessor;
   victim.cooldown = .9;
   player.tackle = .5;
   possessor = player;
-  if (player.team === 'away' && victim === controlled) showMessage('DISPOSSESSED', .8);
+  if (victim === controlled || victim === controlled2) showMessage('DISPOSSESSED', .8);
   if (player.team === 'home') setControlled(player);
+  else if (controlled2) controlled2 = player;
   audio.sfx(150, .1, 'square', .04, 80);
 }
 
 function aiUseBall(player: Footballer): void {
   if (possessor !== player || player.cooldown > 0) return;
   const direction = attackDirection(player.team);
-  const info = teamInfo(player.team);
   if (player.role === 'GK') {
     if (possessionTime > .6) {
       const mate = bestPassTarget(player, false);
@@ -470,8 +638,9 @@ function aiUseBall(player: Footballer): void {
   const distanceToGoal = Math.abs(direction * 52 - player.mesh.position.z);
   const pressure = closestPlayer(otherTeam(player.team), player.mesh.position, false).mesh.position.distanceTo(player.mesh.position);
   if (distanceToGoal < 25) {
-    const scatter = (player.team === 'away' ? difficulty.shotError : 5) * (2 - info.skill);
+    const scatter = (player.team === 'away' ? difficulty.shotError : 5) * (2 - playerSkill(player));
     const target = new THREE.Vector3((Math.random() - .5) * scatter, 0, direction * 53);
+    stats.shots[player.team] += 1;
     kick(player, target, 28 + Math.random() * 8, 2.5 + Math.random() * 2);
   } else if (pressure < 4.2 || Math.random() < .004) {
     const mate = bestPassTarget(player, true);
@@ -482,13 +651,12 @@ function aiUseBall(player: Footballer): void {
 function updateAi(dt: number): void {
   if (phase !== 'playing') return;
   for (const player of players) {
-    if (player === controlled) continue;
+    if (player === controlled || player === controlled2) continue;
     const target = targetForAi(player);
     temp.copy(target).sub(player.mesh.position); temp.y = 0;
     const distance = temp.length();
-    const info = teamInfo(player.team);
-    const base = player.role === 'GK' ? 7 : player.team === 'away' ? difficulty.aiSpeed : 7.7;
-    const speed = base * info.speed * (possessor === player ? .93 : 1);
+    const base = player.role === 'GK' ? 7.4 : player.team === 'away' ? difficulty.aiSpeed : 7.7;
+    const speed = base * playerPace(player) * (possessor === player ? .93 : 1);
     if (distance > .45) {
       temp.normalize();
       player.velocity.copy(temp).multiplyScalar(speed);
@@ -518,6 +686,7 @@ function animatePlayers(dt: number): void {
   selectionRing.position.set(controlled.mesh.position.x, .055, controlled.mesh.position.z);
   selectionArrow.position.set(controlled.mesh.position.x, 3.65 + Math.sin(performance.now() * .006) * .12, controlled.mesh.position.z);
   selectionArrow.rotation.x = Math.PI;
+  if (controlled2) selectionRing2.position.set(controlled2.mesh.position.x, .055, controlled2.mesh.position.z);
 }
 
 function acquireBall(): void {
@@ -527,6 +696,7 @@ function acquireBall(): void {
     possessor = nearest;
     ballVelocity.set(0, 0, 0);
     if (nearest.team === 'home' && nearest !== controlled && phase === 'playing') setControlled(nearest);
+    if (controlled2 && nearest.team === 'away' && nearest !== controlled2 && phase === 'playing') controlled2 = nearest;
   }
 }
 
@@ -534,13 +704,16 @@ function goalkeeperSave(): boolean {
   if (ballVelocity.length() < 10) return false;
   const team: Team = ballVelocity.z < 0 ? 'away' : 'home';
   const keeper = players.find((p) => p.role === 'GK' && p.team === team);
-  if (!keeper || !keeper.mesh.visible || keeper === controlled) return false;
+  if (!keeper || !keeper.mesh.visible || keeper === controlled || keeper === controlled2) return false;
   const reach = team === 'away' ? difficulty.keeperReach : 1.7;
   if (keeper.mesh.position.distanceTo(ball.position) < reach && ball.position.y < 2.7) {
     possessor = keeper;
     ballVelocity.set(0, 0, 0);
+    stats.saves[team] += 1;
     showMessage('GREAT SAVE');
     audio.sfx(190, .18, 'triangle', .05, 95);
+    audio.crowdOoh();
+    shakeTimer = Math.max(shakeTimer, .15);
     if (phase === 'penalty' && penaltyMode === 'shoot') resolveHomePenalty(false);
     return true;
   }
@@ -552,6 +725,7 @@ function handleRestart(restart: Restart): void {
   if (restart.type === 'throw-in') spot.set(Math.sign(ball.position.x) * 31.2, 0, clamp(ball.position.z, -48, 48));
   else if (restart.type === 'corner') spot.set(Math.sign(ball.position.x || 1) * 29.5, 0, Math.sign(ball.position.z) * 49);
   else spot.set(0, 0, Math.sign(ball.position.z) * 45);
+  if (restart.type === 'corner') stats.corners[restart.team] += 1;
   const receiver = restart.type === 'goal-kick'
     ? players.find((p) => p.team === restart.team && p.role === 'GK')!
     : closestPlayer(restart.team, spot, false);
@@ -563,6 +737,7 @@ function handleRestart(restart: Restart): void {
   ballVelocity.set(0, 0, 0);
   ball.position.set(spot.x, BALL_Y, spot.z);
   if (restart.team === 'home' && restart.type !== 'goal-kick') setControlled(receiver);
+  if (controlled2 && restart.team === 'away' && restart.type !== 'goal-kick') controlled2 = receiver;
   showMessage(restart.type === 'throw-in' ? 'THROW IN' : restart.type === 'corner' ? 'CORNER' : 'GOAL KICK', .9);
 }
 
@@ -610,23 +785,29 @@ function registerGoal(team: Team): void {
   lastScorer = team;
   phase = 'celebration';
   celebrationTimer = 3.1;
+  shakeTimer = .5;
   possessor = null;
   ballVelocity.set(0, 0, 0);
   celebrationFocus.copy(lastKicker && lastKicker.team === team ? lastKicker.mesh.position : ball.position);
   const info = teamInfo(team);
   confetti.burst(celebrationFocus, [info.primary, 0xf5ca52, 0xffffff]);
   showMessage(`GOAL - ${info.short}`, 2.6);
+  audio.netSwish();
   audio.sfx(90, .6, 'sawtooth', .055, 45);
   setTimeout(() => audio.sfx(330, .6, 'sine', .04, 660), 160);
-  audio.crowdRoar(team === 'home' ? .2 : .12);
+  audio.crowdRoar(team === 'home' ? .2 : .13);
   updateHud();
 }
 
 function finishRegulation(): void {
   const result = regulationResult(score);
   if (result === 'penalty') {
-    audio.whistle(true);
-    startPenalties();
+    if (mode === 'league' || mode === 'versus') {
+      finishMatch(null);
+    } else {
+      audio.whistle(true);
+      startPenalties();
+    }
   } else finishMatch(result);
 }
 
@@ -704,9 +885,10 @@ function resolveHomePenalty(scored: boolean): void {
   showMessage(scored ? 'PENALTY SCORED' : 'PENALTY MISSED', 1.25);
   audio.sfx(scored ? 520 : 145, .35, scored ? 'sine' : 'sawtooth', .04, scored ? 780 : 70);
   if (scored) {
+    audio.netSwish();
     audio.crowdRoar(.16);
     confetti.burst(ball.position, [homeInfo.primary, 0xf5ca52, 0xffffff]);
-  }
+  } else audio.crowdOoh();
   updatePenaltyHud();
   phase = 'celebration';
   const winner = shootoutWinner(homePens, awayPens);
@@ -724,6 +906,7 @@ function resolveAwayPenalty(scored: boolean, label?: string): void {
   showMessage(scored ? `${awayInfo.short} SCORES` : label ?? `${homeInfo.short} KEEPER SAVES`, 1.25);
   audio.sfx(scored ? 320 : 520, .35, scored ? 'sawtooth' : 'sine', .04, scored ? 120 : 780);
   if (!scored) audio.crowdRoar(.18);
+  else audio.netSwish();
   ballVelocity.set(0, 0, 0);
   updatePenaltyHud();
   phase = 'celebration';
@@ -742,65 +925,148 @@ function updatePenaltyHud(): void {
 }
 
 function refreshCareerLine(): void {
-  careerLine.textContent = `CUPS WON ${save.cupsWon} - MATCHES WON ${save.wins}`;
+  careerLine.textContent = `CUPS ${save.cupsWon} - TITLES ${save.titles} - WINS ${save.wins}`;
 }
 
-function finishMatch(winner: Team): void {
+function renderMatchStats(): void {
+  const possessionTotal = stats.possession.home + stats.possession.away;
+  const homePct = possessionTotal > 0 ? Math.round(stats.possession.home / possessionTotal * 100) : 50;
+  const rows: Array<[string, number | string, number | string]> = [
+    ['SHOTS', stats.shots.home, stats.shots.away],
+    ['SAVES', stats.saves.home, stats.saves.away],
+    ['POSSESSION', `${homePct}%`, `${100 - homePct}%`],
+    ['FOULS', stats.fouls.home, stats.fouls.away],
+    ['CARDS', stats.cards.home, stats.cards.away],
+    ['CORNERS', stats.corners.home, stats.corners.away],
+  ];
+  matchStatsNode.innerHTML = rows.map(([label, h, a]) => `<div><span>${h}</span><b>${label}</b><span>${a}</span></div>`).join('');
+}
+
+function renderLeagueBox(): void {
+  if (!leagueState) {
+    leagueBoxNode.innerHTML = '';
+    return;
+  }
+  const rows = sortTable(leagueState.table);
+  const body = rows.map((row, i) => {
+    const info = teamById(row.id);
+    const me = row.id === homeInfo.id ? ' class="me"' : '';
+    return `<tr${me}><td>${i + 1}</td><td>${info.short}</td><td>${row.p}</td><td>${row.w}</td><td>${row.d}</td><td>${row.l}</td><td>${row.gf - row.ga}</td><td>${row.pts}</td></tr>`;
+  }).join('');
+  leagueBoxNode.innerHTML = `<table><thead><tr><th>#</th><th>CLUB</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>PTS</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function finishMatch(winner: Team | null): void {
   phase = 'finished';
   penaltyAimMarker.visible = false;
   penaltyPanel.classList.remove('visible');
   audio.stopCrowd();
   audio.whistle(true);
   const won = winner === 'home';
+  const drew = winner === null;
   if (won) save = saveData({ wins: save.wins + 1 });
   const pensNote = homePens.length || awayPens.length ? ` (${homePens.filter(Boolean).length}-${awayPens.filter(Boolean).length} PENS)` : '';
   $('#finalScore').textContent = `${homeInfo.short} ${score.home} - ${score.away} ${awayInfo.short}${pensNote}`;
+  renderMatchStats();
 
   const overline = $('#resultOverline');
   const title = $('#resultTitle');
   const detail = $('#resultDetail');
-  if (cup && won && cup.round < 2) {
-    const nextRound = ROUNDS[cup.round + 1];
-    const nextOpponent = teamById(cup.opponents[cup.round + 1]);
-    overline.textContent = `${ROUNDS[cup.round]} WON`;
-    title.innerHTML = `THROUGH TO<br />THE ${nextRound}`;
-    detail.textContent = `Next up: ${nextOpponent.name} - ${nextOpponent.nickname}.`;
-    restartButton.textContent = `PLAY ${nextRound}`;
-    primaryAction = () => {
-      cup!.round += 1;
-      awayInfo = teamById(cup!.opponents[cup!.round]);
-      startMatch();
-    };
-  } else if (cup && won) {
-    save = saveData({ cupsWon: save.cupsWon + 1 });
-    overline.textContent = 'WORLD CROWN CHAMPIONS';
-    title.innerHTML = `${homeInfo.name.replace('TEAM ', '')} RULES<br />THE WORLD`;
-    detail.textContent = 'Three rounds. One crown. A perfect cup run.';
-    restartButton.textContent = 'RUN IT BACK';
-    primaryAction = beginCampaign;
-    confetti.burst(new THREE.Vector3(0, 0, 0), [homeInfo.primary, 0xf5ca52, 0xffffff]);
-    audio.crowdRoar(.22);
-  } else if (cup && !won) {
-    overline.textContent = 'KNOCKED OUT';
-    title.innerHTML = `${awayInfo.short} TAKES<br />THE TIE`;
-    detail.textContent = `The cup run ends at the ${ROUNDS[cup.round].toLowerCase()}. Return stronger.`;
-    restartButton.textContent = 'NEW CUP RUN';
-    primaryAction = beginCampaign;
-  } else if (won) {
-    overline.textContent = 'FRIENDLY WON';
-    title.innerHTML = `${homeInfo.name.replace('TEAM ', '')} RULES<br />THE NIGHT`;
-    detail.textContent = 'A championship performance under the lights.';
-    restartButton.textContent = 'PLAY AGAIN';
-    primaryAction = startMatch;
-    audio.crowdRoar(.18);
+
+  if (leagueState) {
+    const roundFixtures = leagueState.rounds[leagueState.round];
+    const mine = roundFixtures.find((f) => f.home === homeInfo.id || f.away === homeInfo.id)!;
+    const playerHome = mine.home === homeInfo.id;
+    applyResult(leagueState.table, mine.home, mine.away, playerHome ? score.home : score.away, playerHome ? score.away : score.home);
+    for (const fixture of roundFixtures) {
+      if (fixture === mine) continue;
+      const [hg, ag] = simulateScore(strengthOf(teamById(fixture.home)), strengthOf(teamById(fixture.away)));
+      applyResult(leagueState.table, fixture.home, fixture.away, hg, ag);
+    }
+    leagueState.round += 1;
+    const standings = sortTable(leagueState.table);
+    const position = standings.findIndex((row) => row.id === homeInfo.id) + 1;
+    const seasonOver = leagueState.round >= leagueState.rounds.length;
+    if (seasonOver) {
+      const champion = position === 1;
+      if (champion) {
+        save = saveData({ titles: save.titles + 1 });
+        confetti.burst(new THREE.Vector3(0, 0, 0), [homeInfo.primary, 0xf5ca52, 0xffffff]);
+        audio.crowdRoar(.22);
+      }
+      save = saveData({ league: null });
+      overline.textContent = champion ? 'LEAGUE CHAMPIONS' : 'SEASON COMPLETE';
+      title.innerHTML = champion ? `${homeInfo.name.replace('TEAM ', '')} RULES<br />THE LEAGUE` : `${ordinal(position)} PLACE<br />FINISH`;
+      detail.textContent = champion ? 'Ten rounds. Top of the pile. A season to remember.' : `The season ends in ${ordinal(position).toLowerCase()} place. Go again.`;
+      restartButton.textContent = 'NEW SEASON';
+      primaryAction = beginCampaign;
+      leagueState = null;
+    } else {
+      save = saveData({ league: leagueState });
+      const nextFixture = leagueState.rounds[leagueState.round].find((f) => f.home === homeInfo.id || f.away === homeInfo.id)!;
+      const nextOpponent = teamById(nextFixture.home === homeInfo.id ? nextFixture.away : nextFixture.home);
+      overline.textContent = won ? 'LEAGUE WIN' : drew ? 'LEAGUE DRAW' : 'LEAGUE DEFEAT';
+      title.innerHTML = `${ordinal(position)} AFTER<br />ROUND ${leagueState.round}`;
+      detail.textContent = `Next: ${nextOpponent.name} - ${nextOpponent.nickname}.`;
+      restartButton.textContent = `PLAY ROUND ${leagueState.round + 1}/${leagueState.rounds.length}`;
+      primaryAction = () => {
+        setLeagueOpponent();
+        startMatch();
+      };
+    }
+    renderLeagueBox();
   } else {
-    overline.textContent = 'FINAL WHISTLE';
-    title.innerHTML = `${awayInfo.short} TAKES<br />THE NIGHT`;
-    detail.textContent = `${awayInfo.nickname} held firm. Return stronger.`;
-    restartButton.textContent = 'REMATCH';
-    primaryAction = startMatch;
+    renderLeagueBox();
+    if (cup && won && cup.round < 2) {
+      const nextRound = ROUNDS[cup.round + 1];
+      const nextOpponent = teamById(cup.opponents[cup.round + 1]);
+      overline.textContent = `${ROUNDS[cup.round]} WON`;
+      title.innerHTML = `THROUGH TO<br />THE ${nextRound}`;
+      detail.textContent = `Next up: ${nextOpponent.name} - ${nextOpponent.nickname}.`;
+      restartButton.textContent = `PLAY ${nextRound}`;
+      primaryAction = () => {
+        cup!.round += 1;
+        awayInfo = teamById(cup!.opponents[cup!.round]);
+        startMatch();
+      };
+    } else if (cup && won) {
+      save = saveData({ cupsWon: save.cupsWon + 1 });
+      overline.textContent = 'WORLD CROWN CHAMPIONS';
+      title.innerHTML = `${homeInfo.name.replace('TEAM ', '')} RULES<br />THE WORLD`;
+      detail.textContent = 'Three rounds. One crown. A perfect cup run.';
+      restartButton.textContent = 'RUN IT BACK';
+      primaryAction = beginCampaign;
+      confetti.burst(new THREE.Vector3(0, 0, 0), [homeInfo.primary, 0xf5ca52, 0xffffff]);
+      audio.crowdRoar(.22);
+    } else if (cup && !won) {
+      overline.textContent = 'KNOCKED OUT';
+      title.innerHTML = `${awayInfo.short} TAKES<br />THE TIE`;
+      detail.textContent = `The cup run ends at the ${ROUNDS[cup.round].toLowerCase()}. Return stronger.`;
+      restartButton.textContent = 'NEW CUP RUN';
+      primaryAction = beginCampaign;
+    } else if (drew) {
+      overline.textContent = 'ALL SQUARE';
+      title.innerHTML = 'HONOURS<br />SHARED';
+      detail.textContent = 'Nothing to separate the sides at the final whistle.';
+      restartButton.textContent = 'REMATCH';
+      primaryAction = startMatch;
+    } else if (won) {
+      overline.textContent = mode === 'versus' ? 'PLAYER ONE WINS' : 'FRIENDLY WON';
+      title.innerHTML = `${homeInfo.name.replace('TEAM ', '')} RULES<br />THE NIGHT`;
+      detail.textContent = 'A championship performance under the lights.';
+      restartButton.textContent = 'PLAY AGAIN';
+      primaryAction = startMatch;
+      audio.crowdRoar(.18);
+    } else {
+      overline.textContent = mode === 'versus' ? 'PLAYER TWO WINS' : 'FINAL WHISTLE';
+      title.innerHTML = `${awayInfo.short} TAKES<br />THE NIGHT`;
+      detail.textContent = `${awayInfo.nickname} held firm. Return stronger.`;
+      restartButton.textContent = 'REMATCH';
+      primaryAction = startMatch;
+    }
   }
   refreshCareerLine();
+  refreshStartNote();
   resultOverlay.classList.add('visible');
   soundtrack.volume = won ? .55 : .2;
   showMessage('FINAL WHISTLE', 2);
@@ -832,6 +1098,7 @@ function updatePenalty(dt: number): void {
     return;
   }
   if (ball.position.z < -46.5 && ball.position.y < 2.9 && keeper.mesh.position.distanceTo(ball.position) < 1.8) {
+    stats.saves.home += 1;
     resolveAwayPenalty(false, 'WHAT A SAVE');
     return;
   }
@@ -846,7 +1113,7 @@ function updateHud(): void {
   possessionNode.textContent = possessor ? `${teamInfo(possessor.team).short} BALL` : 'LOOSE BALL';
   powerBar.style.width = `${shotCharge * 100}%`;
   powerWrap.classList.toggle('visible', charging);
-  touchControls.classList.toggle('visible', phase === 'playing' || phase === 'penalty');
+  touchControls.classList.toggle('visible', phase === 'playing' || phase === 'penalty' || phase === 'freekick');
   radarCanvas.classList.toggle('visible', phase === 'playing');
 }
 
@@ -862,11 +1129,17 @@ function updateCamera(dt: number): void {
     camera.lookAt(0, 1, -45);
     return;
   }
+  if (phase === 'freekick') {
+    camera.position.lerp(new THREE.Vector3(freeKickSpot.x * .6 + 9, 8.5, freeKickSpot.z + 15), 1 - Math.pow(.02, dt));
+    camera.lookAt(freeKickSpot.x * .3, 1.2, -46);
+    return;
+  }
   if (phase === 'celebration') {
     const t = (3.1 - celebrationTimer) * .85;
     temp.set(celebrationFocus.x + Math.cos(t) * 13, 6.2, celebrationFocus.z + Math.sin(t) * 13);
     camera.position.lerp(temp, 1 - Math.pow(.03, dt));
     camera.lookAt(celebrationFocus.x, 1.3, celebrationFocus.z);
+    applyShake(dt);
     return;
   }
   cameraTarget.copy(ball.position);
@@ -877,6 +1150,14 @@ function updateCamera(dt: number): void {
     : new THREE.Vector3(cameraTarget.x + 40, 43, cameraTarget.z + 42);
   camera.position.lerp(desired, 1 - Math.pow(.06, dt));
   camera.lookAt(cameraTarget.x, 0, cameraTarget.z - 5);
+  applyShake(dt);
+}
+
+function applyShake(dt: number): void {
+  if (shakeTimer <= 0) return;
+  shakeTimer = Math.max(0, shakeTimer - dt);
+  camera.position.x += (Math.random() - .5) * shakeTimer * 1.7;
+  camera.position.y += (Math.random() - .5) * shakeTimer * 1.2;
 }
 
 function update(dt: number): void {
@@ -889,10 +1170,13 @@ function update(dt: number): void {
     possessionTime = 0;
   } else possessionTime += dt;
   if (charging && phase !== 'paused') shotCharge = clamp(shotCharge + dt, 0, 1);
+  if (p2Charging && phase !== 'paused') p2Charge = clamp(p2Charge + dt, 0, 1);
 
   if (phase === 'playing') {
     timeLeft = Math.max(0, timeLeft - dt);
+    if (possessor) stats.possession[possessor.team] += dt;
     updateControlled(dt);
+    updateControlled2(dt);
     updateAi(dt);
     updateBall(dt);
     if (timeLeft <= 0) finishRegulation();
@@ -907,10 +1191,14 @@ function update(dt: number): void {
     updateControlled(dt);
     updateBall(dt);
     updatePenalty(dt);
+  } else if (phase === 'freekick') {
+    updateControlled(dt);
+    updateBall(dt);
   }
   confetti.update(dt);
+  trail.update(ball.position, !possessor && ballVelocity.length() > 17);
 
-  if (phase === 'playing' || phase === 'celebration' || phase === 'penalty') {
+  if (phase === 'playing' || phase === 'celebration' || phase === 'penalty' || phase === 'freekick') {
     crowdTick += dt;
     if (crowdTick > .25) {
       crowdTick = 0;
@@ -920,7 +1208,7 @@ function update(dt: number): void {
   }
   if (phase === 'playing') {
     radar.draw(
-      players.map((p) => ({ x: p.mesh.position.x, z: p.mesh.position.z, team: p.team, controlled: p === controlled })),
+      players.map((p) => ({ x: p.mesh.position.x, z: p.mesh.position.z, team: p.team, controlled: p === controlled || p === controlled2 })),
       { x: ball.position.x, z: ball.position.z },
       homeInfo.css,
       awayInfo.css,
@@ -948,14 +1236,27 @@ function pollGamepad(): void {
   const edge = (i: number): boolean => pressed(i) && !padPrev[i];
   if (phase === 'menu') {
     if (edge(9) || edge(0)) beginCampaign();
+  } else if (controlled2) {
+    if (edge(0)) passFrom(controlled2);
+    if (edge(1)) tackleFor(controlled2);
+    if (edge(2) && possessor === controlled2 && !p2Charging && phase === 'playing') { p2Charging = true; p2Charge = 0; }
+    if (!pressed(2) && padPrev[2] && p2Charging) {
+      p2Charging = false;
+      shootFrom(controlled2, Math.max(.3, p2Charge));
+      p2Charge = 0;
+    }
+    if (edge(3) && phase === 'playing') switchPlayer2();
+    if (edge(4)) lobFrom(controlled2);
+    if (edge(5)) passFrom(controlled2, true);
+    if (edge(9)) togglePause();
   } else {
-    if (edge(0)) passBall(false);
-    if (edge(1)) tackle();
+    if (edge(0)) passFrom(controlled);
+    if (edge(1)) tackleFor(controlled);
     if (edge(2)) beginCharge();
     if (!pressed(2) && padPrev[2]) releaseCharge();
     if (edge(3) && phase === 'playing') switchPlayer();
-    if (edge(4)) lobBall();
-    if (edge(5)) passBall(true);
+    if (edge(4)) lobFrom(controlled);
+    if (edge(5)) passFrom(controlled, true);
     if (edge(9)) togglePause();
   }
   gamepadSprint = pressed(6) || pressed(7);
@@ -989,7 +1290,7 @@ function togglePause(): void {
 
 function beginCharge(): void {
   if (phase === 'penalty' && penaltyMode === 'keep') return;
-  if ((phase === 'playing' || phase === 'penalty') && possessor === controlled && !charging) {
+  if ((phase === 'playing' || phase === 'penalty' || phase === 'freekick') && possessor === controlled && !charging) {
     charging = true;
     shotCharge = 0;
   }
@@ -998,8 +1299,8 @@ function beginCharge(): void {
 function releaseCharge(): void {
   if (!charging) return;
   charging = false;
-  if (phase === 'penalty' || shotCharge > .24) shootBall(Math.max(.25, shotCharge));
-  else passBall(false);
+  if (phase === 'penalty' || phase === 'freekick' || shotCharge > .24) shootFrom(controlled, Math.max(.25, shotCharge));
+  else passFrom(controlled, false);
   shotCharge = 0;
 }
 
@@ -1051,10 +1352,10 @@ function bindTouchAction(selector: string, action: () => void): void {
 }
 
 bindTouchAction('#touchSwitch', () => { if (phase === 'playing') switchPlayer(); });
-bindTouchAction('#touchThrough', () => passBall(true));
-bindTouchAction('#touchLob', lobBall);
-bindTouchAction('#touchTackle', tackle);
-bindTouchAction('#touchPass', () => passBall(false));
+bindTouchAction('#touchThrough', () => passFrom(controlled, true));
+bindTouchAction('#touchLob', () => lobFrom(controlled));
+bindTouchAction('#touchTackle', () => tackleFor(controlled));
+bindTouchAction('#touchPass', () => passFrom(controlled, false));
 
 touchSprintButton.addEventListener('pointerdown', (event) => {
   event.preventDefault();
@@ -1078,7 +1379,7 @@ const releaseTouchShot = (): void => {
   touchShoot.classList.remove('active');
   if (!charging) return;
   charging = false;
-  shootBall(Math.max(.38, shotCharge));
+  shootFrom(controlled, Math.max(.38, shotCharge));
   shotCharge = 0;
 };
 touchShoot.addEventListener('pointerup', releaseTouchShot);
@@ -1093,9 +1394,9 @@ window.addEventListener('keydown', (event) => {
   keys.add(event.code);
   if (event.code === 'Escape') togglePause();
   if (event.code === 'KeyQ' && phase === 'playing') switchPlayer();
-  if (event.code === 'KeyE') passBall(true);
-  if (event.code === 'KeyC') lobBall();
-  if (event.code === 'KeyF') tackle();
+  if (event.code === 'KeyE') passFrom(controlled, true);
+  if (event.code === 'KeyC') lobFrom(controlled);
+  if (event.code === 'KeyF') tackleFor(controlled);
   if (event.code === 'Space') beginCharge();
 });
 window.addEventListener('keyup', (event) => {
@@ -1109,6 +1410,10 @@ window.addEventListener('blur', () => {
   if (charging) {
     charging = false;
     shotCharge = 0;
+  }
+  if (p2Charging) {
+    p2Charging = false;
+    p2Charge = 0;
   }
 });
 
@@ -1136,7 +1441,17 @@ function wirePills(container: HTMLElement, initial: string, onChange: (value: st
 }
 
 function refreshStartNote(): void {
-  startNote.textContent = mode === 'cup' ? 'THREE ROUNDS TO GLORY' : `${Math.round(matchLength / 60)} MINUTE MATCH`;
+  if (mode === 'cup') {
+    startNote.textContent = 'THREE ROUNDS TO GLORY';
+  } else if (mode === 'league') {
+    const lg = save.league;
+    const resumable = lg && lg.playerTeam === homeInfo.id && lg.round < lg.rounds.length;
+    startNote.textContent = resumable ? `RESUME SEASON - ROUND ${lg.round + 1}/${lg.rounds.length}` : 'NEW SEASON - 10 ROUNDS';
+  } else if (mode === 'versus') {
+    startNote.textContent = 'P1 KEYBOARD VS P2 GAMEPAD';
+  } else {
+    startNote.textContent = `${Math.round(matchLength / 60)} MINUTE MATCH`;
+  }
 }
 
 function buildTeamSelect(): void {
@@ -1153,6 +1468,7 @@ function buildTeamSelect(): void {
       save = saveData({ teamId: team.id });
       teamTagline.textContent = `${team.name} - ${team.nickname}`;
       for (const chip of Array.from(teamSelectNode.children)) chip.classList.toggle('selected', chip === button);
+      refreshStartNote();
     });
     teamSelectNode.appendChild(button);
   }
@@ -1200,15 +1516,24 @@ window.__worldStrike = {
     score: { ...score },
     possessor: possessor?.team ?? null,
     controlled: controlled.number,
+    p2: controlled2?.number ?? null,
     controlledPosition: { x: controlled.mesh.position.x, z: controlled.mesh.position.z },
     ballPosition: { x: ball.position.x, y: ball.position.y, z: ball.position.z },
     penaltyRound: Math.max(homePens.length, awayPens.length),
     difficulty: difficulty.id,
+    mode,
     teams: { home: homeInfo.id, away: awayInfo.id },
     cupRound: cup?.round ?? null,
+    leagueRound: leagueState?.round ?? null,
+    stats: { shots: { ...stats.shots }, fouls: { ...stats.fouls }, saves: { ...stats.saves } },
   }),
   setTime: (seconds) => { timeLeft = clamp(seconds, 0, matchLength); },
   forceGoal: (team) => registerGoal(team),
+  forceFreeKick: () => {
+    if (phase !== 'playing') return;
+    controlled.mesh.position.set(4, 0, -24);
+    startFreeKick(controlled, false);
+  },
   start: startMatch,
 };
 

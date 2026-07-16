@@ -218,6 +218,55 @@ export function createBall(): THREE.Mesh {
   return ball;
 }
 
+export interface BallTrail {
+  points: THREE.Points;
+  update(position: THREE.Vector3, active: boolean): void;
+}
+
+/** Fading streak behind fast-moving balls. */
+export function createTrail(count = 16): BallTrail {
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  for (let i = 0; i < count; i += 1) {
+    const fade = 1 - i / count;
+    colors[i * 3] = fade;
+    colors[i * 3 + 1] = fade * .88;
+    colors[i * 3 + 2] = fade * .5;
+  }
+  geometry.attributes.color.needsUpdate = true;
+  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ size: .3, vertexColors: true, transparent: true, opacity: .75 }));
+  points.visible = false;
+  points.frustumCulled = false;
+
+  return {
+    points,
+    update(position: THREE.Vector3, active: boolean): void {
+      if (!active) {
+        if (points.visible) points.visible = false;
+        for (let i = 0; i < count; i += 1) {
+          positions[i * 3] = position.x;
+          positions[i * 3 + 1] = position.y;
+          positions[i * 3 + 2] = position.z;
+        }
+        return;
+      }
+      for (let i = count - 1; i > 0; i -= 1) {
+        positions[i * 3] = positions[(i - 1) * 3];
+        positions[i * 3 + 1] = positions[(i - 1) * 3 + 1];
+        positions[i * 3 + 2] = positions[(i - 1) * 3 + 2];
+      }
+      positions[0] = position.x;
+      positions[1] = position.y;
+      positions[2] = position.z;
+      geometry.attributes.position.needsUpdate = true;
+      points.visible = true;
+    },
+  };
+}
+
 export interface Confetti {
   points: THREE.Points;
   burst(origin: THREE.Vector3, palette: number[]): void;

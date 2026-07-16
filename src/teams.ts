@@ -1,3 +1,10 @@
+import type { Role } from './gameCore';
+
+/** Per-role pace multipliers so strikers feel quicker than defenders. */
+export const ROLE_SPEED: Record<Role, number> = { GK: .94, DEF: .97, MID: 1.01, ST: 1.07 };
+/** Per-role finishing/passing quality multipliers. */
+export const ROLE_SKILL: Record<Role, number> = { GK: .9, DEF: .95, MID: 1.05, ST: 1.08 };
+
 export interface TeamInfo {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 # World Strike 3D
 
-Pick one of six fictional clubs and fight through cinematic 5v5 matches in Crown Arena - as a one-off friendly or a three-round Crown Cup run (quarter-final, semi-final, final).
+Pick one of six fictional clubs and fight through cinematic 5v5 matches in Crown Arena - a one-off friendly, a local 2-player versus match, a three-round Crown Cup run, or a full 10-round league season with a live standings table.
 
 ## Play
 
@@ -34,13 +34,19 @@ Pick one of six fictional clubs and fight through cinematic 5v5 matches in Crown
 ## Match format
 
 - 5v5 arcade matches (2, 3 or 5 minutes) with AI teammates and opponents
+- Four modes: **Friendly**, **2P Versus** (keyboard vs gamepad, draws allowed), **Crown Cup** (three knockout rounds) and **League** (10-round double round-robin season with simulated rival fixtures and a persistent standings table)
 - Three difficulty tiers (Easy / Pro / Legend) that scale AI speed, tackling pressure, keeper reach and finishing
 - Opponents can dispossess you - protect the ball
+- Fouls, yellow cards and direct free kicks: get fouled in the attacking third and you take an aimed, charged set piece over a defensive wall
+- Smarter AI: strikers make forward runs beyond the ball, midfielders offer support angles
+- Per-role player stats - strikers are quicker, midfielders pass better, defenders are steadier
 - Throw-ins, corners and goal kicks when the ball leaves play
-- Goal celebrations with a camera orbit, confetti and crowd roar; reactive crowd ambience all match
-- Best-of-three penalty shootout after a draw, with sudden death - you take your kicks **and** play as the keeper for theirs
+- Goal celebrations with a camera orbit, confetti, crowd roar, net swish and camera shake; reactive crowd ambience all match; kick sounds scale with power
+- Ball trail on powerful strikes
+- Full-time match stats: shots, saves, possession, fouls, cards, corners
+- Best-of-three penalty shootout after a draw (cup/friendly), with sudden death - you take your kicks **and** play as the keeper for theirs
 - Radar minimap so you can find teammates for through balls
-- Team choice, mode, difficulty, match length, music setting and career record (cups and match wins) persist in localStorage
+- Team choice, mode, difficulty, match length, music setting, league season and career record (cups, titles, match wins) persist in localStorage
 
 ## Original score
 

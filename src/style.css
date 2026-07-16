@@ -78,7 +78,7 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
 .team-chip.selected { border-color: var(--gold); background: rgba(245,202,82,.12); box-shadow: 0 0 0 1px var(--gold); }
 .team-tagline { position: relative; margin: 9px 0 0; color: #9eb4d6; font: 600 9px 'IBM Plex Mono'; letter-spacing: .12em; }
 
-.setup-row { position: relative; display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap: 10px; margin: 16px 0 18px; }
+.setup-row { position: relative; display: grid; grid-template-columns: 1.7fr 1.2fr 1.1fr; gap: 10px; margin: 16px 0 18px; }
 .pill-row { display: flex; gap: 5px; margin-top: 6px; }
 .pill-row button { flex: 1; padding: 7px 2px; color: #c9d7ee; background: transparent; border: 1px solid rgba(255,255,255,.22); cursor: pointer; font: 700 11px 'Barlow Condensed'; letter-spacing: .08em; }
 .pill-row button:hover { border-color: rgba(255,255,255,.5); }
@@ -102,7 +102,18 @@ h1 em { color: transparent; font-style: italic; -webkit-text-stroke: 2px #fff; }
 .result-card { width: min(590px, 94vw); }
 .result-card h2 { margin-bottom: 14px; }
 .result-card > p:not(.overline) { color: #9eb0c9; }
-.final-score { margin: 24px 0; padding: 13px; border-block: 1px solid rgba(255,255,255,.16); }
+.final-score { margin: 24px 0 14px; padding: 13px; border-block: 1px solid rgba(255,255,255,.16); }
+.match-stats { margin: 0 auto 14px; max-width: 340px; }
+.match-stats div { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 3px 0; }
+.match-stats span { font: 600 12px 'IBM Plex Mono'; }
+.match-stats span:first-child { text-align: right; }
+.match-stats span:last-child { text-align: left; }
+.match-stats b { min-width: 110px; color: #8ca0bd; font: 600 8px 'IBM Plex Mono'; letter-spacing: .14em; }
+.league-box { margin: 0 auto 16px; }
+.league-box table { width: 100%; max-width: 360px; margin: 0 auto; border-collapse: collapse; font: 600 10px 'IBM Plex Mono'; }
+.league-box th { padding: 4px 5px; color: #8ca0bd; font-size: 8px; letter-spacing: .1em; border-bottom: 1px solid rgba(255,255,255,.2); }
+.league-box td { padding: 4px 5px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.07); }
+.league-box tr.me td { color: var(--gold); background: rgba(245,202,82,.08); }
 .final-score span { display: block; color: #8092ad; font: 600 9px 'IBM Plex Mono'; }
 .final-score strong { display: block; margin-top: 5px; font-size: 27px; }
 .penalty-panel { position: absolute; z-index: 6; top: 84px; left: 50%; transform: translateX(-50%) translateY(-8px); min-width: 430px; padding: 9px 16px; opacity: 0; background: rgba(2,9,25,.9); border-bottom: 2px solid var(--gold); text-align: center; transition: .2s; pointer-events: none; }

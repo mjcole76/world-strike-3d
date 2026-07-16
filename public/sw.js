@@ -1,9 +1,11 @@
-const CACHE = 'world-strike-3d-v1';
+const CACHE = 'world-strike-3d-v2';
 const PRECACHE = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
   '/favicon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
   '/audio/world-crown-anthem.mp3',
 ];
 
