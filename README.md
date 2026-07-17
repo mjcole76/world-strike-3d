@@ -35,7 +35,8 @@ Pick one of six fictional clubs and fight through cinematic 5v5 matches in Crown
 
 - 5v5 arcade matches (2, 3 or 5 minutes) with AI teammates and opponents
 - Four modes: **Friendly**, **2P Versus** (keyboard vs gamepad, draws allowed), **Crown Cup** (three knockout rounds) and **League** (10-round double round-robin season with simulated rival fixtures and a persistent standings table)
-- Three difficulty tiers (Easy / Pro / Legend) that scale AI speed, tackling pressure, keeper reach and finishing
+- Four difficulty tiers (Easy / Pro / Legend / World Class) that scale AI speed, tackling pressure, keeper reach, passing cadence, shooting range and finishing
+- Four competition choices available on desktop and mobile: Exhibition, 2P Versus, three-round Crown Cup and a 10-round League season
 - Opponents can dispossess you - protect the ball
 - Fouls, yellow cards and direct free kicks: get fouled in the attacking third and you take an aimed, charged set piece over a defensive wall
 - Smarter AI: strikers make forward runs beyond the ball, midfielders offer support angles

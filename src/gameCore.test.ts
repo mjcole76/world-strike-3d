@@ -34,10 +34,14 @@ describe('restarts', () => {
 });
 
 describe('difficulty', () => {
-  it('defines all three tiers', () => expect(Object.keys(DIFFICULTIES)).toEqual(['easy', 'pro', 'legend']));
+  it('defines all four tiers', () => expect(Object.keys(DIFFICULTIES)).toEqual(['easy', 'pro', 'legend', 'world']));
   it('scales opponent pressure upward', () => {
     expect(DIFFICULTIES.easy.stealRate).toBeLessThan(DIFFICULTIES.pro.stealRate);
     expect(DIFFICULTIES.pro.stealRate).toBeLessThan(DIFFICULTIES.legend.stealRate);
-    expect(DIFFICULTIES.easy.aiSpeed).toBeLessThan(DIFFICULTIES.legend.aiSpeed);
+    expect(DIFFICULTIES.legend.stealRate).toBeLessThan(DIFFICULTIES.world.stealRate);
+    expect(DIFFICULTIES.easy.aiSpeed).toBeLessThan(DIFFICULTIES.world.aiSpeed);
+    expect(DIFFICULTIES.world.keeperReach).toBeGreaterThan(DIFFICULTIES.legend.keeperReach);
+    expect(DIFFICULTIES.world.shootDistance).toBeGreaterThan(DIFFICULTIES.pro.shootDistance);
+    expect(DIFFICULTIES.world.passRate).toBeGreaterThan(DIFFICULTIES.legend.passRate);
   });
 });

@@ -56,7 +56,7 @@ export function classifyRestart(x: number, z: number, lastTouch: Team, halfWidth
   return { type: 'corner', team: attacker };
 }
 
-export type DifficultyId = 'easy' | 'pro' | 'legend';
+export type DifficultyId = 'easy' | 'pro' | 'legend' | 'world';
 
 export interface Difficulty {
   id: DifficultyId;
@@ -73,12 +73,19 @@ export interface Difficulty {
   shotError: number;
   /** Chance the opponent penalty taker picks a well-placed target. */
   penAccuracy: number;
+  /** Distance from goal where opponent AI will shoot. */
+  shootDistance: number;
+  /** Pressure distance that triggers an opponent pass. */
+  pressureDistance: number;
+  /** Unforced opponent pass decisions per second. */
+  passRate: number;
 }
 
 export const DIFFICULTIES: Record<DifficultyId, Difficulty> = {
-  easy: { id: 'easy', label: 'EASY', aiSpeed: 7, stealRate: .35, keeperReach: 1.45, keeperTrack: 4.5, shotError: 8, penAccuracy: .5 },
-  pro: { id: 'pro', label: 'PRO', aiSpeed: 7.9, stealRate: .7, keeperReach: 1.65, keeperTrack: 7, shotError: 5, penAccuracy: .72 },
-  legend: { id: 'legend', label: 'LEGEND', aiSpeed: 8.6, stealRate: 1.15, keeperReach: 1.9, keeperTrack: 9.5, shotError: 3, penAccuracy: .88 },
+  easy: { id: 'easy', label: 'EASY', aiSpeed: 7, stealRate: .35, keeperReach: 1.45, keeperTrack: 4.5, shotError: 8, penAccuracy: .5, shootDistance: 21, pressureDistance: 3.4, passRate: .1 },
+  pro: { id: 'pro', label: 'PRO', aiSpeed: 7.9, stealRate: .7, keeperReach: 1.65, keeperTrack: 7, shotError: 5, penAccuracy: .72, shootDistance: 25, pressureDistance: 4.2, passRate: .22 },
+  legend: { id: 'legend', label: 'LEGEND', aiSpeed: 8.6, stealRate: 1.15, keeperReach: 1.9, keeperTrack: 9.5, shotError: 3, penAccuracy: .88, shootDistance: 29, pressureDistance: 5.1, passRate: .4 },
+  world: { id: 'world', label: 'WORLD CLASS', aiSpeed: 9.35, stealRate: 1.65, keeperReach: 2.15, keeperTrack: 12, shotError: 1.8, penAccuracy: .94, shootDistance: 34, pressureDistance: 6.2, passRate: .62 },
 };
 
 export function clamp(value: number, min: number, max: number): number {

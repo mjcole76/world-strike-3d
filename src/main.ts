@@ -625,7 +625,7 @@ function attemptSteal(player: Footballer, dt: number): void {
   audio.sfx(150, .1, 'square', .04, 80);
 }
 
-function aiUseBall(player: Footballer): void {
+function aiUseBall(player: Footballer, dt: number): void {
   if (possessor !== player || player.cooldown > 0) return;
   const direction = attackDirection(player.team);
   if (player.role === 'GK') {
@@ -637,12 +637,13 @@ function aiUseBall(player: Footballer): void {
   }
   const distanceToGoal = Math.abs(direction * 52 - player.mesh.position.z);
   const pressure = closestPlayer(otherTeam(player.team), player.mesh.position, false).mesh.position.distanceTo(player.mesh.position);
-  if (distanceToGoal < 25) {
-    const scatter = (player.team === 'away' ? difficulty.shotError : 5) * (2 - playerSkill(player));
+  const profile = player.team === 'away' ? difficulty : DIFFICULTIES.pro;
+  if (distanceToGoal < profile.shootDistance) {
+    const scatter = profile.shotError * (2 - playerSkill(player));
     const target = new THREE.Vector3((Math.random() - .5) * scatter, 0, direction * 53);
     stats.shots[player.team] += 1;
     kick(player, target, 28 + Math.random() * 8, 2.5 + Math.random() * 2);
-  } else if (pressure < 4.2 || Math.random() < .004) {
+  } else if (pressure < profile.pressureDistance || Math.random() < profile.passRate * dt) {
     const mate = bestPassTarget(player, true);
     kick(player, mate.mesh.position.clone().add(new THREE.Vector3(0, 0, direction * 3)), 20, .65);
   }
@@ -666,7 +667,7 @@ function updateAi(dt: number): void {
       player.mesh.rotation.y = Math.atan2(player.velocity.x, player.velocity.z);
     } else player.velocity.multiplyScalar(.8);
     attemptSteal(player, dt);
-    aiUseBall(player);
+    aiUseBall(player, dt);
   }
 }
 
